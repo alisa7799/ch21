@@ -3,7 +3,8 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
-import '../model/event_model.dart';
+import '../services/notification_service.dart';
+import '../models/event_model.dart';
 
 class CalendarScreen extends StatefulWidget {
   @override
@@ -16,13 +17,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime? _endDate;
   String? _recurrenceType;
   Map<DateTime, List<Event>> _events = {};
-
+  final NotificationService _notificationService = NotificationService();
 
   @override
   void initState() {
     super.initState();
     _loadEvents();
-
+    _notificationService.initialize();
   }
 
   DateTime _normalizeDate(DateTime date) {
@@ -35,6 +36,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         key.toIso8601String(), value.map((event) => event.toJson()).toList()));
     await prefs.setString('events', jsonEncode(data));
     print("Saved Events: ${jsonEncode(data)}");
+    
   }
 
   Future<void> _loadEvents() async {
@@ -111,6 +113,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _events.remove(normalizedDate);
       }
     });
+
+    _notificationService.cancelNotification( //알림 취소
+      event.dateTime.millisecondsSinceEpoch % 100000,
+    );
 
     // 반영
     _saveEvents();
@@ -239,7 +245,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     );
 
                     setState(() {
-                      if (_recurrenceType != null && _recurrenceType != "none") {
+                      if (_recurrenceType != null && _recurrenceType != "none") {//반복 주기 있으면
                         List<DateTime> recurringDates = _calculateRecurringDates(
                           startDate: eventDateTime,
                           recurrenceType: _recurrenceType!,
@@ -256,10 +262,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           } else {
                             _events[normalizedDate] = [
                               Event(title: _eventController.text, dateTime: date)
-                            ];
+                            ]; 
                           }
+                          
+                          _notificationService.scheduleNotification(
+                            id: date.millisecondsSinceEpoch % 100000,//예비
+                            title: _eventController.text,
+                            body: "일정 시간: ${date.hour}:${date.minute}",
+                            scheduledDate: date,
+                          );
                         }
-                      } else {
+                      } else { //반복주기 없으면
                         DateTime normalizedDate = _normalizeDate(_selectedDay!);
                         if (_events[normalizedDate] != null) {
                           _events[normalizedDate]!.add(Event(
@@ -272,6 +285,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 dateTime: eventDateTime)
                           ];
                         }
+
+                        _notificationService.scheduleNotification(
+                          id: eventDateTime.millisecondsSinceEpoch % 100000,//예비
+                          title: _eventController.text,
+                          body: "일정 시간: ${eventDateTime.hour}:${eventDateTime.minute}",
+                          scheduledDate: eventDateTime,
+                        );
                       }
                     });
 
